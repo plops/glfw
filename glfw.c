@@ -17,6 +17,11 @@ enum { CMDLEN=100,
 
 int running=GL_TRUE;
 
+// Draw a vertical line that moves to a different vertical position in
+// every frame. This is useful for verifying the synchronization of
+// the drawing function, screen and camera exposure.
+int show_calibration_stripes=1;
+
 double
 quit(double*ignore) 
 {
@@ -187,6 +192,27 @@ init_matrix()
   m[15]=1;
 }
 
+int
+check_stdin()
+{
+  fd_set rfds;
+  struct timeval tv;
+  
+  // Watch stdin (fd 0) to see when it has input.
+  FD_ZERO(&rfds);
+  FD_SET(0,&rfds);
+
+  // wait for 10 ms				
+  tv.tv_sec=0;
+  tv.tv_usec=10000;
+  
+  int retval = select(1,&rfds,NULL,NULL,&tv);
+
+  if(retval==-1)
+    perror("select()");
+  
+  return retval;
+}
 
 // Main program. Open a window. Continuously read commands from the
 // command line interface and draw frames with 60Hz onto the
@@ -203,7 +229,6 @@ main()
   // refresh of screen. On Nvidia hardware this can be done by setting
   // the following environment variable.
   setenv("__GL_SYNC_TO_VBLANK","1",1); 
-  
   
   if(!glfwInit())
     exit(EXIT_FAILURE);
@@ -238,22 +263,19 @@ main()
 
 
   while(running){
-    // line=fgets(s,sizeof(s),stdin);
-    //printf("retval: %g\n", parse_line(line));
-
+    if(check_stdin()>0){
+      line=fgets(s,sizeof(s),stdin);
+      printf("retval: %g\n", parse_line(line));
+    }
+    
     glClear(GL_COLOR_BUFFER_BIT);
-    //printf("%d\n",count++);
-    //glLoadIdentity();
     glLoadMatrixf(m);
     
-    float v = 100+20*(count%10);
-    glRectf(v,0,v+2,400);
+    if(show_calibration_stripes){
+      float v = 100+20*((count++)%10);
+      glRectf(v,0,v+2,400);
+    }
 
-    glRotated(count++,0,0,1);
-    glBegin(GL_LINES);
-    glVertex2f(0,0);
-    glVertex2f(1,1);
-    glEnd();
     glfwSleep(1./68);
     glfwSwapBuffers();
   }
