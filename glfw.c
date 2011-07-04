@@ -4,7 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-
+#include "queue.h"
 #define NAN __builtin_nan("")
 
 #define len(x) (sizeof(x)/sizeof(x[0]))
@@ -51,7 +51,7 @@ help(double*ignore)
   unsigned int i;
   printf("This is a very simple parser. Each command is defined by one word\n"
 	 "followed by some single float parameters.\n"
-	 "cmd [parameters] .. Description\n");
+	 "cmd 'number of parameters' .. Description\n");
   for(i=0;i<len(cmd);i++)
     printf("%s %d .. %s\n",cmd[i].name,cmd[i].args,cmd[i].docstring);
   return 0.0;
@@ -225,6 +225,7 @@ check_stdin()
 int
 main()
 {
+
   // make sure frame rate update cycle is phase locked to vertical
   // refresh of screen. On Nvidia hardware this can be done by setting
   // the following environment variable.
@@ -235,7 +236,6 @@ main()
   
   if(!glfwOpenWindow(1280,1024,8,8,8,
 		     0,0,0,
-		     //GLFW_FULLSCREEN
 		     GLFW_WINDOW
 		     )){
     glfwTerminate();
