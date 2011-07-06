@@ -4,15 +4,68 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include "queue.h"
+
 #define NAN __builtin_nan("")
 
 #define len(x) (sizeof(x)/sizeof(x[0]))
 
 enum { CMDLEN=100,
+       CIRCBUFLEN=10,
+       CIRCBUFNUMELEMS=CIRCBUFLEN-1,
        MAXARGS=3,
        DOCSTRINGLEN=200,
 };
+
+// http://en.wikipedia.org/wiki/Circular_buffer
+char *circbuf[CIRCBUFLEN];
+int circwrite=0, // points where the next element will be written
+  circread=0, // points where the next element will be read from
+  circsize=CIRCBUFNUMELEMS;
+void
+circ_init()
+{
+  circwrite=0;
+  circread=0;
+  circsize=CIRCBUFNUMELEMS;
+}
+
+int emptyp(){ return circwrite==circread;}
+
+int fullp(){ return ((circwrite+1)%CIRCBUFLEN)==circread;}
+
+// increase but keep integer within 0..CIRCBUFLEN-1
+int
+inc(int *pos)
+{
+  int v=*pos;
+  v++;
+  if(v>=CIRCBUFLEN)
+    v=0;
+  (*pos)=v;
+  return v;
+}
+
+int
+push(char*s)
+{
+  if(fullp())
+    printf("error circbuffer is full\n");
+  circbuf[circwrite]=s;
+  return inc(&circwrite);
+}
+
+char*
+pop()
+{
+  if(emptyp()){
+    printf("error buffer is empty");
+    return 0;
+  }
+  char*ret=circbuf[circread];
+  inc(&circread);
+  return ret;
+}
+
 
 
 int running=GL_TRUE;
@@ -225,6 +278,13 @@ check_stdin()
 int
 main()
 {
+  push("1test");
+  push("2bla");
+  push("3hdsfih");
+  printf("%s\n",pop());
+  printf("%s\n",pop());
+  printf("%s\n",pop());
+  return 0;
 
   // make sure frame rate update cycle is phase locked to vertical
   // refresh of screen. On Nvidia hardware this can be done by setting

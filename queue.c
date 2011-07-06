@@ -5,6 +5,8 @@
 #include <string.h>
 #include "queue.h"
 
+#define e(q) do{fprintf(stderr,"error in file %s:%d in function %s, while calling %s\n",__FILE__,__LINE__,__FUNCTION__,q);}while(0)
+
 typedef struct double_list_node double_list_node;
 struct double_list_node {
   double_list_node *prev, *next;
@@ -54,6 +56,7 @@ void insert_beginning(double_list list,
   list.first=list.last=new;
   new->prev=0;
   new->next=0;
+  printf("insert-beginning list=(0x%x 0x%x) new=0x%x\n",list.first,list.last,new);
 }
 
 T copy_T(const T*t)
@@ -76,14 +79,15 @@ T* copy_T_into(T*dst,const T*src)
 }
 
 double_list_node*
-make_node(const T *t)
+make_node(T t)
 {
   double_list_node *new=malloc(sizeof(*new));
-  copy_T_into(&(new->data),t);
+  copy_T_into(&(new->data),&t);
+  e("make-node %d %d\n",new->data.type,new->data.data[0]);
   return new;
 }
 
-void push_front(const T*t)
+void push_front(T t)
 {
   insert_beginning(task_list,make_node(t));
 }
@@ -97,7 +101,7 @@ void insert_end(double_list list,
   insert_beginning(list,new);
 }
 
-void push_back(const T*t)
+void push_back(T t)
 {
   insert_end(task_list,make_node(t));
 }
@@ -106,8 +110,10 @@ T double_list_remove(double_list list,
 	    double_list_node *node)
 {
   T data={-1,{0,0,0,0}};
-  if(!node)
+  if(!node){
+    e("node to remove is null\n");
     return data;
+  }
   if(node->prev)
     node->prev->next=node->next;
   else
@@ -136,7 +142,7 @@ T pop_back()
 int main()
 {
   T bla={1,{2,3,4}};
-  push_front(&bla);
+  push_front(bla);
   T q=pop_front();
   printf("%d\n",q.type);
   
