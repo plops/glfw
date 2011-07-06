@@ -130,6 +130,37 @@ swap(double*v)
   return 0.0;
 }
 
+double
+qdisk(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"disk %g %g %g",
+	   v[0], v[1], v[2]);
+  push(cmd);
+  return 0.0;
+}
+
+double
+disk(double*v)
+{
+  glPushMatrix();
+  glTranslated(v[0],v[1],0);
+  glScaled(v[2],v[2],v[2]);
+  int i;
+  glBegin(GL_TRIANGLE_FAN);
+  glVertex2d(0,0);
+  enum{NDISK=13};
+  for(i=1;i<NDISK;i++){
+    double arg=i*2*M_PI/NDISK;
+    glVertex2d(sin(arg),cos(arg));
+  }
+  glEnd();
+  glPopMatrix();
+  return 0.0;
+}
+
+
+
 // array that contains all functions that can be called from text interface
 struct{ 
   char name[CMDLEN];
@@ -139,8 +170,10 @@ struct{
   char docstring[DOCSTRINGLEN];
 }cmd[]={{"help",0,0,help,"exit main program"},
        	{"quit",0,0,quit,"list all possible commands"},
-	{"qline",4,1,qline,"draw a line"},
+	{"qline",4,1,qline,"draw a line x0 y0 x1 y1"},
 	{"line",4,0,line,"immediately draw a line"},
+	{"qline",3,1,qline,"draw a disk x y r"},
+	{"line",3,0,line,"immediately draw a disk"},
 	{"qswap",0,1,qswap,"initiate swap-buffers"},
 	{"swap",0,0,swap,"immediate swap-buffers"}};
 
