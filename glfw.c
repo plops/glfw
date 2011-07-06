@@ -18,6 +18,9 @@ enum { CMDLEN=100,
 
 // http://en.wikipedia.org/wiki/Circular_buffer
 char *circbuf[CIRCBUFLEN];
+// circular buffer contains pointer to commands
+// there always must be an empty element between reader and writer
+// text has to be freed after it is popped
 int circwrite=0, // points where the next element will be written
   circread=0, // points where the next element will be read from
   circsize=CIRCBUFNUMELEMS;
@@ -46,7 +49,7 @@ inc(int *pos)
 }
 
 int
-push(char*s)
+push(char*s) // write the pointer s into the circular buffer
 {
   if(fullp())
     printf("error circbuffer is full\n");
@@ -55,11 +58,10 @@ push(char*s)
 }
 
 char*
-pop()
+pop() // obtain next pointer from circular buffer
 {
   if(emptyp()){
-    printf("error buffer is empty");
-    return 0;
+    printf("error buffer is empty\n");
   }
   char*ret=circbuf[circread];
   inc(&circread);
@@ -67,6 +69,12 @@ pop()
 }
 
 
+/*
+line 0 0 100 100
+line 10 3 100 100
+line 42 23 100 100
+swap
+ */
 
 int running=GL_TRUE;
 
@@ -86,14 +94,55 @@ quit(double*ignore)
 // this function can only be defined after cmd[]
 double help(double*); 
 
+double
+qline(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"line %g %g %g %g",
+	  v[0],v[1],v[2],v[3]);
+  push(cmd);
+  return 0.0;
+}
+
+double
+line(double*v)
+{
+  glBegin(GL_LINES);
+  glVertex2d(v[0],v[1]);
+  glVertex2d(v[2],v[3]);
+  glEnd();
+  return 0.0;
+}
+
+double
+qswap(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"swap");
+  push(cmd);
+  return 0.0;
+}
+
+double
+swap(double*v)
+{
+  glfwSwapBuffers();
+  return 0.0;
+}
+
 // array that contains all functions that can be called from text interface
 struct{ 
   char name[CMDLEN];
-  int args;
+  int args, // number of float arguments
+    queued; // is pushed into circular buffer
   double (*fptr)(double*);
   char docstring[DOCSTRINGLEN];
-}cmd[]={{"help",0,help,"exit main program"},
-       	{"quit",0,quit,"list all possible commands"},};
+}cmd[]={{"help",0,0,help,"exit main program"},
+       	{"quit",0,0,quit,"list all possible commands"},
+	{"qline",4,1,qline,"draw a line"},
+	{"line",4,0,line,"immediately draw a line"},
+	{"qswap",0,1,qswap,"initiate swap-buffers"},
+	{"swap",0,0,swap,"immediate swap-buffers"}};
 
 
 // print synopsis of each possible command
@@ -104,9 +153,11 @@ help(double*ignore)
   unsigned int i;
   printf("This is a very simple parser. Each command is defined by one word\n"
 	 "followed by some single float parameters.\n"
+	 "The first column of this table is 'q', when the command will be queued for later frame synchronized execution\n"
 	 "cmd 'number of parameters' .. Description\n");
   for(i=0;i<len(cmd);i++)
-    printf("%s %d .. %s\n",cmd[i].name,cmd[i].args,cmd[i].docstring);
+    printf("%c %s %d .. %s\n",(cmd[i].queued==1)?'q':' ',
+	   cmd[i].name,cmd[i].args,cmd[i].docstring);
   return 0.0;
 }
 
@@ -141,7 +192,6 @@ parse_name(char*tok)
   if(tok){
     if(isalpha(tok[0])){
       fun_index=lookup(tok);
-      // printf("+%s=%d+\n",tok,fun_index);
     }else{
       printf("error, expected function name\n");
       return -1;
@@ -188,14 +238,11 @@ parse_line(char*line)
           return NAN;
         }else
           args[i]=d;
-        //printf("%g\n",d);
     }else{
       printf("error, expected digit or .+- but found %c\n",tok[0]);
       return NAN;
     }   
   }
-  // fprintf(logfile,"%llu running %s\n",cmd_number++,cmd[fun_index].name);
-  // fflush(logfile);
   return cmd[fun_index].fptr(args);
 }
 
@@ -209,7 +256,6 @@ keyhandler(int key,int action)
     running=GL_FALSE;
   return;
 }
-
 
 // OpenGL Modelview Matrix
 float m[4*4];
@@ -278,14 +324,7 @@ check_stdin()
 int
 main()
 {
-  push("1test");
-  push("2bla");
-  push("3hdsfih");
-  printf("%s\n",pop());
-  printf("%s\n",pop());
-  printf("%s\n",pop());
-  return 0;
-
+  
   // make sure frame rate update cycle is phase locked to vertical
   // refresh of screen. On Nvidia hardware this can be done by setting
   // the following environment variable.
@@ -323,7 +362,7 @@ main()
 
 
   while(running){
-    if(check_stdin()>0){
+    while(check_stdin()>0){
       line=fgets(s,sizeof(s),stdin);
       printf("retval: %g\n", parse_line(line));
     }
@@ -331,16 +370,21 @@ main()
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
     
-    if(show_calibration_stripes){
-      float v = 100+20*((count++)%10);
-      glRectf(v,0,v+2,400);
+    count++;
+    char *cmd;
+    while((cmd=pop()) &&
+	  (0!=strncmp(cmd,"qswap",CMDLEN))){
+      parse_line(cmd);
+      free(cmd);
     }
-
-    glfwSleep(1./68);
+    //    if(show_calibration_stripes){
+    //     float v = 100+20*(count%10);
+    //     glRectf(v,0,v+2,400);    
+    //    }
     glfwSwapBuffers();
+    glfwSleep(1./72);
   }
   
-
   glfwCloseWindow();
 
   glfwTerminate();
