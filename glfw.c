@@ -10,7 +10,7 @@
 #define len(x) (sizeof(x)/sizeof(x[0]))
 
 enum { CMDLEN=100,
-       CIRCBUFLEN=10,
+       CIRCBUFLEN=10000,
        CIRCBUFNUMELEMS=CIRCBUFLEN-1,
        MAXARGS=3,
        DOCSTRINGLEN=200,
@@ -42,8 +42,7 @@ inc(int *pos)
 {
   int v=*pos;
   v++;
-  if(v>=CIRCBUFLEN)
-    v=0;
+  v%=CIRCBUFLEN;
   (*pos)=v;
   return v;
 }
@@ -61,10 +60,14 @@ char*
 pop() // obtain next pointer from circular buffer
 {
   if(emptyp()){
-    printf("error buffer is empty\n");
+    //intf("error buffer is empty\n");
+    return 0;
   }
+
   char*ret=circbuf[circread];
+  printf("%d %s\n",circread,ret);
   inc(&circread);
+
   return ret;
 }
 
@@ -130,6 +133,23 @@ swap(double*v)
   return 0.0;
 }
 
+
+double
+qclear(double*v)
+{
+  char*cmd=malloc(CMDLEN);
+  snprintf(cmd,CMDLEN,"clear");
+  push(cmd);
+  return 0.0;
+}
+
+double
+clear(double*v)
+{
+  glClear(GL_COLOR_BUFFER_BIT);
+  return 0.0;
+}
+
 double
 qdisk(double*v)
 {
@@ -150,15 +170,22 @@ disk(double*v)
   glBegin(GL_TRIANGLE_FAN);
   glVertex2d(0,0);
   enum{NDISK=13};
-  for(i=1;i<NDISK;i++){
+  glVertex2d(0,1);
+  for(i=2;i<NDISK;i++){
     double arg=i*2*M_PI/NDISK;
     glVertex2d(sin(arg),cos(arg));
   }
+  glVertex2d(0,1);
   glEnd();
   glPopMatrix();
   return 0.0;
 }
 
+double
+toggle_stripes(double*v){
+  show_calibration_stripes=(int)v[0];
+  return 1.0*show_calibration_stripes;
+}
 
 
 // array that contains all functions that can be called from text interface
@@ -172,10 +199,14 @@ struct{
        	{"quit",0,0,quit,"list all possible commands"},
 	{"qline",4,1,qline,"draw a line x0 y0 x1 y1"},
 	{"line",4,0,line,"immediately draw a line"},
-	{"qline",3,1,qline,"draw a disk x y r"},
-	{"line",3,0,line,"immediately draw a disk"},
+	{"qdisk",3,1,qdisk,"draw a disk x y r"},
+	{"disk",3,0,disk,"immediately draw a disk"},
+	{"swap",0,0,swap,"immediate swap-buffers"},
 	{"qswap",0,1,qswap,"initiate swap-buffers"},
-	{"swap",0,0,swap,"immediate swap-buffers"}};
+	{"clear",0,0,clear,"immediately clear screen"},
+	{"qclear",0,1,qclear,"clear screen"},
+	{"toggle-stripes",1,0,toggle_stripes,"toggle display of calibration stripes"},
+};
 
 
 // print synopsis of each possible command
@@ -355,7 +386,7 @@ check_stdin()
 // always be maintained, due to the time a garbage collection may
 // take.
 int
-main()
+main(int argc,char**argv)
 {
   
   // make sure frame rate update cycle is phase locked to vertical
@@ -365,15 +396,23 @@ main()
   
   if(!glfwInit())
     exit(EXIT_FAILURE);
-  
-  if(!glfwOpenWindow(1280,1024,8,8,8,
+  int width=1280,height=1024;
+
+  if(argc==3){
+    width=atoi(argv[1]);
+    height=atoi(argv[2]);
+  }
+   
+  if(!glfwOpenWindow(width,height,8,8,8,
 		     0,0,0,
 		     GLFW_WINDOW
 		     )){
     glfwTerminate();
     exit(EXIT_FAILURE);
   }
-  
+  printf("lcos started %dx%d\n",width,height);
+  fflush(stdout);
+
   glfwSetWindowTitle("LCoS");
   //glfwSetWindowPos(-8,-31);
 
@@ -397,25 +436,35 @@ main()
   while(running){
     while(check_stdin()>0){
       line=fgets(s,sizeof(s),stdin);
-      printf("retval: %g\n", parse_line(line));
+      parse_line(line);
+      //printf("retval: %g\n", );
+      //fflush(stdout);
     }
     
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
     
     count++;
-    char *cmd;
-    while((cmd=pop()) &&
+    char *cmd=0;
+    
+    // run all commands which have been stored in the queue
+    while((!emptyp()) &&
+	  (cmd=pop()) &&
 	  (0!=strncmp(cmd,"qswap",CMDLEN))){
       parse_line(cmd);
+      printf("q %d %d %s\n",circread,circwrite,cmd);
+      fflush(stdout);
       free(cmd);
     }
-    //    if(show_calibration_stripes){
-    //     float v = 100+20*(count%10);
-    //     glRectf(v,0,v+2,400);    
-    //    }
-    glfwSwapBuffers();
+    if(cmd==0){ // no command
+      if(show_calibration_stripes){
+	float v = 100+20*(count%10);
+	glRectf(v,0,v+2,400);    
+      }
+    } else 
+      free(cmd); // qswap
     glfwSleep(1./72);
+    glfwSwapBuffers();
   }
   
   glfwCloseWindow();
