@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <sys/time.h>
 
 #define NAN __builtin_nan("")
 
@@ -15,6 +16,8 @@ enum { CMDLEN=100,
        MAXARGS=3,
        DOCSTRINGLEN=200,
 };
+
+int frame_count=0; // increments whenever a new frame is shown
 
 // http://en.wikipedia.org/wiki/Circular_buffer
 char *circbuf[CIRCBUFLEN];
@@ -65,7 +68,7 @@ pop() // obtain next pointer from circular buffer
   }
 
   char*ret=circbuf[circread];
-  printf("%d %s\n",circread,ret);
+  printf("cread=%d cmd=%s\n",circread,ret);
   inc(&circread);
 
   return ret;
@@ -171,7 +174,7 @@ disk(double*v)
   glVertex2d(0,0);
   enum{NDISK=13};
   glVertex2d(0,1);
-  for(i=2;i<NDISK;i++){
+  for(i=1;i<NDISK;i++){
     double arg=i*2*M_PI/NDISK;
     glVertex2d(sin(arg),cos(arg));
   }
@@ -215,10 +218,11 @@ help(double*ignore)
 {
   (void)ignore;
   unsigned int i;
-  printf("This is a very simple parser. Each command is defined by one word\n"
+  printf("\nThis is a very simple parser. Each command is defined by one word\n"
 	 "followed by some single float parameters.\n"
-	 "The first column of this table is 'q', when the command will be queued for later frame synchronized execution\n"
-	 "cmd 'number of parameters' .. Description\n");
+	 "The first column of this table is 'q', when the command will be queued\n"
+	 "for later frame synchronized execution\n"
+	 "cmd 'number of parameters' .. Description\n\n");
   for(i=0;i<len(cmd);i++)
     printf("%c %s %d .. %s\n",(cmd[i].queued==1)?'q':' ',
 	   cmd[i].name,cmd[i].args,cmd[i].docstring);
@@ -257,18 +261,16 @@ parse_name(char*tok)
     if(isalpha(tok[0])){
       fun_index=lookup(tok);
     }else{
-      printf("error, expected function name\n");
+      printf("parse_name error, expected function name instead of %s\n", tok);
       return -1;
     }
   }else{
-    printf("error, expected some function name but got nothing");
+    printf("parse_name error, expected some function name but got nothing\n");
     return -1;
   }
   return fun_index;
 }
 
-// Global counter of all commands that have been executed
-unsigned long long cmd_number=0;
 
 // Split a line into a space separated tokens. THe first token should
 // be the name of a function, the following tokens are parsed as float
@@ -291,7 +293,7 @@ parse_line(char*line)
   for(i=0;i<arg_num;i++){
     tok=strtok(0,search);
     if(!tok){
-      printf("error, expected an argument");
+      printf("error, expected an argument but got 0\n");
       return NAN;
     }
     if(isfloatchar(tok[0])){
@@ -425,44 +427,43 @@ main(int argc,char**argv)
   glMatrixMode(GL_PROJECTION);
   glOrtho(0,1280,1024,0,-1,1);
   glMatrixMode(GL_MODELVIEW);
-
-  int count=0;
   
-  char s[CMDLEN],*line;
-
-  
-
-
   while(running){
     while(check_stdin()>0){
-      line=fgets(s,sizeof(s),stdin);
+      char*s=malloc(CMDLEN);
+      char*line=fgets(s,CMDLEN,stdin);
+      if(line!=s)
+	printf("fgets error\n");
       parse_line(line);
-      //printf("retval: %g\n", );
-      //fflush(stdout);
     }
     
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadMatrixf(m);
     
-    count++;
-    char *cmd=0;
+    frame_count++;
     
     // run all commands which have been stored in the queue
-    while((!emptyp()) &&
-	  (cmd=pop()) &&
-	  (0!=strncmp(cmd,"qswap",CMDLEN))){
+    while(!emptyp()){
+      char*cmd=pop();
+      if(0==strncmp(cmd,"swap",4)){
+	struct timeval tv;
+	gettimeofday(&tv,0);
+	printf("q swap frame-count=%d sec=%lu usec=%lu\n",
+	       frame_count,tv.tv_sec,tv.tv_usec);
+	free(cmd);
+	goto nextframe;
+      }
       parse_line(cmd);
-      printf("q %d %d %s\n",circread,circwrite,cmd);
+      printf("q cread=%5d cwrite=%5d cmd=%s\n",circread,circwrite,cmd);
       fflush(stdout);
       free(cmd);
     }
-    if(cmd==0){ // no command
-      if(show_calibration_stripes){
-	float v = 100+20*(count%10);
-	glRectf(v,0,v+2,400);    
-      }
-    } else 
-      free(cmd); // qswap
+  nextframe:
+    if(show_calibration_stripes){
+      float v = 100+20*(frame_count%10);
+      glRectf(v,0,v+2,400);    
+    }
+    
     glfwSleep(1./72);
     glfwSwapBuffers();
   }
